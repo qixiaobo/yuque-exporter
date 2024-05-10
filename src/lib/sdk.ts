@@ -116,7 +116,29 @@ export class SDK {
   }
 
   async getDocs(namespace: string) {
-    return await this.requestAPI<Doc[]>(`repos/${namespace}/docs`);
+    return await this.fetchAllDocs(`${namespace}`);
+  }
+
+  async fetchAllDocs(namespace: string): Promise<Doc[]> {
+    const batchSize = 100; // 明确每批加载的文档数量
+    let docs = await this.requestAPI<Doc[]>(`repos/${namespace}/docs?limit=${batchSize}`);
+    let totalDocs = docs.length;
+    if (totalDocs < batchSize) return docs;
+    let offset = 0;
+    while (offset < 10000) { // 添加循环次数限制防止无限循环
+      try {
+        offset += batchSize;
+        const nextBatch = await this.requestAPI<Doc[]>(`repos/${namespace}/docs?limit=${batchSize}&offset=${offset}`);
+        if (nextBatch.length === 0) break; // 防止进入下一次循环，如果API返回空数组
+        docs.push(...nextBatch);
+        totalDocs += nextBatch.length;
+      } catch (error) {
+        console.error("Failed to fetch next batch of docs:", error);
+        break; // 处理异常，跳出循环
+      }
+    }
+    console.info("total doc:" + totalDocs);
+    return docs;
   }
 
   async getDocDetail(namespace: string, slug: string) {
